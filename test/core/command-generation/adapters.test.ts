@@ -18,6 +18,7 @@ import { geminiAdapter } from '../../../src/core/command-generation/adapters/gem
 import { githubCopilotAdapter } from '../../../src/core/command-generation/adapters/github-copilot.js';
 import { iflowAdapter } from '../../../src/core/command-generation/adapters/iflow.js';
 import { kilocodeAdapter } from '../../../src/core/command-generation/adapters/kilocode.js';
+import { kimicodeAdapter } from '../../../src/core/command-generation/adapters/kimicode.js';
 import { opencodeAdapter } from '../../../src/core/command-generation/adapters/opencode.js';
 import { piAdapter } from '../../../src/core/command-generation/adapters/pi.js';
 import { qoderAdapter } from '../../../src/core/command-generation/adapters/qoder.js';
@@ -503,6 +504,28 @@ describe('command-generation/adapters', () => {
     });
   });
 
+  describe('kimicodeAdapter', () => {
+    it('should have correct toolId', () => {
+      expect(kimicodeAdapter.toolId).toBe('kimicode');
+    });
+
+    it('should generate correct file path', () => {
+      const filePath = kimicodeAdapter.getFilePath('explore');
+      expect(filePath).toBe(path.join('.kimicode', 'commands', 'opsx-explore.md'));
+    });
+
+    it('should generate correct file paths for different commands', () => {
+      expect(kimicodeAdapter.getFilePath('new')).toBe(path.join('.kimicode', 'commands', 'opsx-new.md'));
+      expect(kimicodeAdapter.getFilePath('bulk-archive')).toBe(path.join('.kimicode', 'commands', 'opsx-bulk-archive.md'));
+    });
+
+    it('should format file without frontmatter', () => {
+      const output = kimicodeAdapter.formatFile(sampleContent);
+      expect(output).not.toContain('---');
+      expect(output).toContain('This is the command body.');
+    });
+  });
+
   describe('opencodeAdapter', () => {
     it('should have correct toolId', () => {
       expect(opencodeAdapter.toolId).toBe('opencode');
@@ -697,7 +720,7 @@ describe('command-generation/adapters', () => {
         amazonQAdapter, antigravityAdapter, auggieAdapter, bobAdapter, clineAdapter,
         codexAdapter, codebuddyAdapter, continueAdapter, costrictAdapter,
         crushAdapter, factoryAdapter, geminiAdapter, githubCopilotAdapter,
-        iflowAdapter, kilocodeAdapter, opencodeAdapter, piAdapter, qoderAdapter,
+        iflowAdapter, kilocodeAdapter, kimicodeAdapter, opencodeAdapter, piAdapter, qoderAdapter,
         qwenAdapter, roocodeAdapter
       ];
       for (const adapter of adapters) {
