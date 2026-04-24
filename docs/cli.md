@@ -124,8 +124,11 @@ openspec/
 .claude/skills/         # Claude Code skills (if claude selected)
 .cursor/skills/         # Cursor skills (if cursor selected)
 .cursor/commands/       # Cursor OPSX commands (if delivery includes commands)
+.trae/skills/           # Trae skills (always generated; used as command surface)
 ... (other tool configs)
 ```
+
+**Delivery mode and tool capability:** Not all tools support command-file generation. Tools like Trae use skills as their command surface (`skills-invocable`). When `delivery=commands` is set, OpenSpec still generates skills for such tools rather than removing them. Tools with no command surface (e.g., ForgeCode) cannot be used with `delivery=commands`; OpenSpec will report an error and suggest switching to `delivery=both` or `delivery=skills`. See [Supported Tools](supported-tools.md#command-surface-capability-model) for details.
 
 ---
 

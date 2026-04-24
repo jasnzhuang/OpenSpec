@@ -105,4 +105,34 @@ describe('command-generation/registry', () => {
       }
     });
   });
+
+  describe('getCommandSurface', () => {
+    it('should return "adapter" for tools with a registered adapter (inferred)', () => {
+      expect(CommandAdapterRegistry.getCommandSurface('claude')).toBe('adapter');
+      expect(CommandAdapterRegistry.getCommandSurface('cursor')).toBe('adapter');
+      expect(CommandAdapterRegistry.getCommandSurface('windsurf')).toBe('adapter');
+    });
+
+    it('should return "none" for tools with no registered adapter and no override', () => {
+      expect(CommandAdapterRegistry.getCommandSurface('forgecode')).toBe('none');
+      expect(CommandAdapterRegistry.getCommandSurface('unknown-tool')).toBe('none');
+    });
+
+    it('should return the explicit override when provided', () => {
+      expect(CommandAdapterRegistry.getCommandSurface('trae', 'skills-invocable')).toBe('skills-invocable');
+      expect(CommandAdapterRegistry.getCommandSurface('claude', 'none')).toBe('none');
+      expect(CommandAdapterRegistry.getCommandSurface('unknown', 'adapter')).toBe('adapter');
+    });
+
+    it('should return "skills-invocable" for Trae using its config metadata', async () => {
+      const { AI_TOOLS } = await import('../../../src/core/config.js');
+      const trae = AI_TOOLS.find((t) => t.value === 'trae');
+      expect(trae).toBeDefined();
+      expect(CommandAdapterRegistry.getCommandSurface('trae', trae?.commandSurface)).toBe('skills-invocable');
+    });
+
+    it('should infer "adapter" when explicit override matches inferred value', () => {
+      expect(CommandAdapterRegistry.getCommandSurface('claude', 'adapter')).toBe('adapter');
+    });
+  });
 });

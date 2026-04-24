@@ -1771,4 +1771,46 @@ content
       consoleSpy.mockRestore();
     });
   });
+
+  describe('command-surface capability (Trae / skills-invocable)', () => {
+    it('should keep Trae skills when delivery=commands (skills-invocable)', async () => {
+      setMockConfig({
+        featureFlags: {},
+        profile: 'core',
+        delivery: 'commands',
+      });
+
+      const skillsDir = path.join(testDir, '.trae', 'skills');
+      await fs.mkdir(path.join(skillsDir, 'openspec-explore'), { recursive: true });
+      await fs.writeFile(path.join(skillsDir, 'openspec-explore', 'SKILL.md'), 'old');
+
+      await expect(updateCommand.execute(testDir)).resolves.toBeUndefined();
+
+      // Trae skills should NOT be removed even in commands-only delivery
+      expect(await FileSystemUtils.fileExists(
+        path.join(skillsDir, 'openspec-explore', 'SKILL.md')
+      )).toBe(true);
+    });
+
+    it('should update Trae skills when delivery=commands', async () => {
+      setMockConfig({
+        featureFlags: {},
+        profile: 'core',
+        delivery: 'commands',
+      });
+
+      const skillsDir = path.join(testDir, '.trae', 'skills');
+      await fs.mkdir(path.join(skillsDir, 'openspec-explore'), { recursive: true });
+      await fs.writeFile(path.join(skillsDir, 'openspec-explore', 'SKILL.md'), 'old-content-without-version');
+
+      await expect(updateCommand.execute(testDir)).resolves.toBeUndefined();
+
+      // Skills should be refreshed with new content
+      const content = await fs.readFile(
+        path.join(skillsDir, 'openspec-explore', 'SKILL.md'),
+        'utf-8'
+      );
+      expect(content).toContain('name: openspec-explore');
+    });
+  });
 });

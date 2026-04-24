@@ -6,6 +6,7 @@
  */
 
 import type { ToolCommandAdapter } from './types.js';
+import type { CommandSurface } from '../config.js';
 import { amazonQAdapter } from './adapters/amazon-q.js';
 import { antigravityAdapter } from './adapters/antigravity.js';
 import { auggieAdapter } from './adapters/auggie.js';
@@ -103,5 +104,23 @@ export class CommandAdapterRegistry {
    */
   static has(toolId: string): boolean {
     return CommandAdapterRegistry.adapters.has(toolId);
+  }
+
+  /**
+   * Resolve the effective command surface capability for a tool.
+   *
+   * If an explicit `commandSurface` override is provided it takes precedence.
+   * Otherwise the capability is inferred: tools with a registered adapter resolve
+   * to `adapter`; all other tools resolve to `none`.
+   *
+   * @param toolId - The tool identifier (e.g., 'trae', 'claude')
+   * @param override - Explicit override from tool metadata (optional)
+   * @returns The effective command surface capability
+   */
+  static getCommandSurface(toolId: string, override?: CommandSurface): CommandSurface {
+    if (override !== undefined) {
+      return override;
+    }
+    return CommandAdapterRegistry.has(toolId) ? 'adapter' : 'none';
   }
 }

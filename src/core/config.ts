@@ -9,6 +9,18 @@ export interface OpenSpecConfig {
   aiTools: string[];
 }
 
+/**
+ * How a tool exposes OpenSpec commands.
+ *
+ * - `adapter`: command files are generated through a registered command adapter
+ * - `skills-invocable`: skills are directly invocable as commands (no adapter needed)
+ * - `none`: no OpenSpec command surface
+ *
+ * When omitted, the effective capability is inferred: tools with a registered adapter
+ * resolve to `adapter`; all others resolve to `none`.
+ */
+export type CommandSurface = 'adapter' | 'skills-invocable' | 'none';
+
 export interface AIToolOption {
   name: string;
   value: string;
@@ -16,6 +28,7 @@ export interface AIToolOption {
   successLabel?: string;
   skillsDir?: string; // e.g., '.claude' - /skills suffix per Agent Skills spec
   detectionPaths?: string[]; // Override skillsDir for auto-detection; any path existing triggers detection
+  commandSurface?: CommandSurface; // Explicit override; inferred from adapter registry presence when omitted
 }
 
 export const AI_TOOLS: AIToolOption[] = [
@@ -46,7 +59,7 @@ export const AI_TOOLS: AIToolOption[] = [
   { name: 'Lingma', value: 'lingma', available: true, successLabel: 'Lingma', skillsDir: '.lingma' },
   { name: 'Qwen Code', value: 'qwen', available: true, successLabel: 'Qwen Code', skillsDir: '.qwen' },
   { name: 'RooCode', value: 'roocode', available: true, successLabel: 'RooCode', skillsDir: '.roo' },
-  { name: 'Trae', value: 'trae', available: true, successLabel: 'Trae', skillsDir: '.trae' },
+  { name: 'Trae', value: 'trae', available: true, successLabel: 'Trae', skillsDir: '.trae', commandSurface: 'skills-invocable' },
   { name: 'Windsurf', value: 'windsurf', available: true, successLabel: 'Windsurf', skillsDir: '.windsurf' },
   { name: 'AGENTS.md (works with Amp, VS Code, …)', value: 'agents', available: false, successLabel: 'your AGENTS.md-compatible assistant' }
 ];

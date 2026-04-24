@@ -167,7 +167,8 @@ export class UpdateCommand {
     console.log();
 
     // 9. Determine what to generate based on delivery
-    const skillTemplates = shouldGenerateSkills ? getSkillTemplates(desiredWorkflows) : [];
+    // Always pre-compute skill templates since skills-invocable tools need them even in commands-only delivery
+    const skillTemplates = getSkillTemplates(desiredWorkflows);
     const commandContents = shouldGenerateCommands ? getCommandContents(desiredWorkflows) : [];
 
     // 10. Update tools (all if force, otherwise only those needing update)
@@ -188,8 +189,20 @@ export class UpdateCommand {
       try {
         const skillsDir = path.join(resolvedProjectPath, tool.skillsDir, 'skills');
 
-        // Generate skill files if delivery includes skills
-        if (shouldGenerateSkills) {
+        // Compute per-tool command surface capability
+        const commandSurface = CommandAdapterRegistry.getCommandSurface(tool.value, tool.commandSurface);
+
+        // Determine per-tool effective delivery
+        const toolGenerateSkills =
+          shouldGenerateSkills || commandSurface === 'skills-invocable';
+        const toolGenerateCommands =
+          shouldGenerateCommands && commandSurface === 'adapter';
+        // Remove skills when delivery is commands-only, unless the tool uses skills as its command surface
+        const toolRemoveSkills =
+          !shouldGenerateSkills && commandSurface !== 'skills-invocable';
+
+        // Generate skill files if effective delivery includes skills for this tool
+        if (toolGenerateSkills) {
           for (const { template, dirName } of skillTemplates) {
             const skillDir = path.join(skillsDir, dirName);
             const skillFile = path.join(skillDir, 'SKILL.md');
@@ -203,13 +216,13 @@ export class UpdateCommand {
           removedDeselectedSkillCount += await this.removeUnselectedSkillDirs(skillsDir, desiredWorkflows);
         }
 
-        // Delete skill directories if delivery is commands-only
-        if (!shouldGenerateSkills) {
+        // Delete skill directories if delivery is commands-only and tool has an adapter
+        if (toolRemoveSkills) {
           removedSkillCount += await this.removeSkillDirs(skillsDir);
         }
 
-        // Generate commands if delivery includes commands
-        if (shouldGenerateCommands) {
+        // Generate commands if effective delivery includes commands for this tool
+        if (toolGenerateCommands) {
           const adapter = CommandAdapterRegistry.get(tool.value);
           if (adapter) {
             const generatedCommands = generateCommands(commandContents, adapter);
@@ -647,7 +660,8 @@ export class UpdateCommand {
     const newlyConfigured: string[] = [];
     const shouldGenerateSkills = delivery !== 'commands';
     const shouldGenerateCommands = delivery !== 'skills';
-    const skillTemplates = shouldGenerateSkills ? getSkillTemplates(desiredWorkflows) : [];
+    // Always pre-compute skill templates since skills-invocable tools need them even in commands-only delivery
+    const skillTemplates = getSkillTemplates(desiredWorkflows);
     const commandContents = shouldGenerateCommands ? getCommandContents(desiredWorkflows) : [];
 
     for (const toolId of selectedTools) {
@@ -659,8 +673,17 @@ export class UpdateCommand {
       try {
         const skillsDir = path.join(projectPath, tool.skillsDir, 'skills');
 
-        // Create skill files when delivery includes skills
-        if (shouldGenerateSkills) {
+        // Compute per-tool command surface capability
+        const commandSurface = CommandAdapterRegistry.getCommandSurface(tool.value, tool.commandSurface);
+
+        // Determine per-tool effective delivery
+        const toolGenerateSkills =
+          shouldGenerateSkills || commandSurface === 'skills-invocable';
+        const toolGenerateCommands =
+          shouldGenerateCommands && commandSurface === 'adapter';
+
+        // Create skill files when effective delivery includes skills for this tool
+        if (toolGenerateSkills) {
           for (const { template, dirName } of skillTemplates) {
             const skillDir = path.join(skillsDir, dirName);
             const skillFile = path.join(skillDir, 'SKILL.md');
@@ -672,8 +695,8 @@ export class UpdateCommand {
           }
         }
 
-        // Create commands when delivery includes commands
-        if (shouldGenerateCommands) {
+        // Create commands when effective delivery includes commands for this tool
+        if (toolGenerateCommands) {
           const adapter = CommandAdapterRegistry.get(tool.value);
           if (adapter) {
             const generatedCommands = generateCommands(commandContents, adapter);

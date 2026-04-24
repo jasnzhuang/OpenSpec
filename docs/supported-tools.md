@@ -47,7 +47,7 @@ You can enable expanded workflows (`new`, `continue`, `ff`, `verify`, `sync`, `b
 | Qoder (`qoder`) | `.qoder/skills/openspec-*/SKILL.md` | `.qoder/commands/opsx/<id>.md` |
 | Qwen Code (`qwen`) | `.qwen/skills/openspec-*/SKILL.md` | `.qwen/commands/opsx-<id>.toml` |
 | RooCode (`roocode`) | `.roo/skills/openspec-*/SKILL.md` | `.roo/commands/opsx-<id>.md` |
-| Trae (`trae`) | `.trae/skills/openspec-*/SKILL.md` | Not generated (no command adapter; use skill-based `/openspec-*` invocations) |
+| Trae (`trae`) | `.trae/skills/openspec-*/SKILL.md` | Skills are the command surface (`/openspec-*` invocations); no separate command files generated |
 | Windsurf (`windsurf`) | `.windsurf/skills/openspec-*/SKILL.md` | `.windsurf/workflows/opsx-<id>.md` |
 
 \* Codex commands are installed in the global Codex home (`$CODEX_HOME/prompts/` if set, otherwise `~/.codex/prompts/`), not your project directory.
@@ -101,6 +101,30 @@ When selected by profile/workflow config, OpenSpec generates these skills:
 - `openspec-onboard`
 
 See [Commands](commands.md) for command behavior and [CLI](cli.md) for `init`/`update` options.
+
+## Command-Surface Capability Model
+
+Not all tools use the same mechanism to expose OpenSpec commands. OpenSpec categorizes tools by their *command surface*:
+
+| Capability | Meaning | Examples |
+|------------|---------|---------|
+| `adapter` | Command files generated through a registered adapter | Claude, Cursor, Windsurf, most tools |
+| `skills-invocable` | Skills are directly invocable as commands (no separate command files) | Trae |
+| `none` | No OpenSpec command surface | ForgeCode |
+
+### Delivery mode interaction
+
+The effective behavior per tool depends on both the global `delivery` setting and the tool's command-surface capability:
+
+| Delivery | `adapter` tool | `skills-invocable` tool | `none` tool |
+|----------|---------------|------------------------|-------------|
+| `both` | Skills + commands generated | Skills generated | Skills generated |
+| `skills` | Skills generated, commands removed | Skills generated | Skills generated |
+| `commands` | Commands generated, skills removed | Skills generated (as command surface) | **Error** — use `delivery=both` or `delivery=skills` |
+
+**Trae with `delivery=commands`:** Because Trae uses skill-based `/openspec-*` invocations rather than adapter-generated command files, OpenSpec keeps (or generates) Trae's skills even when `delivery=commands` is configured. This ensures Trae users always have a functional command surface regardless of the global delivery setting.
+
+**Troubleshooting:** If `openspec init` fails with a *"no command surface"* error, one of your selected tools does not support command-file generation (command surface `none`). Switch to `delivery=both` or `delivery=skills` (run `openspec config profile`), or deselect the incompatible tool.
 
 ## Related
 

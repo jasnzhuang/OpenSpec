@@ -499,6 +499,7 @@ export class InitCommand {
     refreshedTools: typeof tools;
     failedTools: Array<{ name: string; error: Error }>;
     commandsSkipped: string[];
+    skillsAsCommandSurface: string[];
     removedCommandCount: number;
     removedSkillCount: number;
   }> {
@@ -506,6 +507,7 @@ export class InitCommand {
     const refreshedTools: typeof tools = [];
     const failedTools: Array<{ name: string; error: Error }> = [];
     const commandsSkipped: string[] = [];
+    const skillsAsCommandSurface: string[] = [];
     let removedCommandCount = 0;
     let removedSkillCount = 0;
 
@@ -518,16 +520,42 @@ export class InitCommand {
     // Get skill and command templates filtered by profile workflows
     const shouldGenerateSkills = delivery !== 'commands';
     const shouldGenerateCommands = delivery !== 'skills';
-    const skillTemplates = shouldGenerateSkills ? getSkillTemplates(workflows) : [];
+    const skillTemplates = getSkillTemplates(workflows);
     const commandContents = shouldGenerateCommands ? getCommandContents(workflows) : [];
+
+    // Preflight: when delivery=commands, fail fast if any tool has no command surface
+    if (delivery === 'commands') {
+      const noneTools = tools.filter((tool) => {
+        const toolConfig = AI_TOOLS.find((t) => t.value === tool.value);
+        return CommandAdapterRegistry.getCommandSurface(tool.value, toolConfig?.commandSurface) === 'none';
+      });
+      if (noneTools.length > 0) {
+        const ids = noneTools.map((t) => t.value).join(', ');
+        throw new Error(
+          `The following tool(s) have no command surface and cannot be used with delivery=commands: ${ids}.\n` +
+          `Use delivery=both or delivery=skills instead (run \`openspec config profile\` to change).`
+        );
+      }
+    }
 
     // Process each tool
     for (const tool of tools) {
       const spinner = ora(`Setting up ${tool.name}...`).start();
 
       try {
-        // Generate skill files if delivery includes skills
-        if (shouldGenerateSkills) {
+        const toolConfig = AI_TOOLS.find((t) => t.value === tool.value);
+        const commandSurface = CommandAdapterRegistry.getCommandSurface(tool.value, toolConfig?.commandSurface);
+
+        // Determine per-tool effective delivery
+        const toolGenerateSkills =
+          delivery !== 'commands' || commandSurface === 'skills-invocable';
+        const toolGenerateCommands =
+          delivery !== 'skills' && commandSurface === 'adapter';
+        const toolRemoveSkills =
+          delivery === 'commands' && commandSurface === 'adapter';
+
+        // Generate skill files if effective delivery includes skills for this tool
+        if (toolGenerateSkills) {
           // Use tool-specific skillsDir
           const skillsDir = path.join(projectPath, tool.skillsDir, 'skills');
 
@@ -545,13 +573,14 @@ export class InitCommand {
             await FileSystemUtils.writeFile(skillFile, skillContent);
           }
         }
-        if (!shouldGenerateSkills) {
+
+        if (toolRemoveSkills) {
           const skillsDir = path.join(projectPath, tool.skillsDir, 'skills');
           removedSkillCount += await this.removeSkillDirs(skillsDir);
         }
 
-        // Generate commands if delivery includes commands
-        if (shouldGenerateCommands) {
+        // Generate commands if effective delivery includes commands for this tool
+        if (toolGenerateCommands) {
           const adapter = CommandAdapterRegistry.get(tool.value);
           if (adapter) {
             const generatedCommands = generateCommands(commandContents, adapter);
@@ -564,8 +593,15 @@ export class InitCommand {
             commandsSkipped.push(tool.value);
           }
         }
+
+        // Remove command files when delivery is skills-only
         if (!shouldGenerateCommands) {
           removedCommandCount += await this.removeCommandFiles(projectPath, tool.value);
+        }
+
+        // Track skills-invocable tools so we can report them separately
+        if (commandSurface === 'skills-invocable' && delivery === 'commands') {
+          skillsAsCommandSurface.push(tool.value);
         }
 
         spinner.succeed(`Setup complete for ${tool.name}`);
@@ -586,6 +622,7 @@ export class InitCommand {
       refreshedTools,
       failedTools,
       commandsSkipped,
+      skillsAsCommandSurface,
       removedCommandCount,
       removedSkillCount,
     };
@@ -631,6 +668,7 @@ export class InitCommand {
       refreshedTools: typeof tools;
       failedTools: Array<{ name: string; error: Error }>;
       commandsSkipped: string[];
+      skillsAsCommandSurface: string[];
       removedCommandCount: number;
       removedSkillCount: number;
     },
@@ -656,7 +694,9 @@ export class InitCommand {
       const delivery: Delivery = globalConfig.delivery ?? 'both';
       const workflows = getProfileWorkflows(profile, globalConfig.workflows);
       const toolDirs = [...new Set(successfulTools.map((t) => t.skillsDir))].join(', ');
-      const skillCount = delivery !== 'commands' ? getSkillTemplates(workflows).length : 0;
+      // Skills are generated when delivery is not commands-only, or for skills-invocable tools
+      const hasSkillTools = delivery !== 'commands' || results.skillsAsCommandSurface.length > 0;
+      const skillCount = hasSkillTools ? getSkillTemplates(workflows).length : 0;
       const commandCount = delivery !== 'skills' ? getCommandContents(workflows).length : 0;
       if (skillCount > 0 && commandCount > 0) {
         console.log(`${skillCount} skills and ${commandCount} commands in ${toolDirs}/`);
@@ -675,6 +715,9 @@ export class InitCommand {
     // Show skipped commands
     if (results.commandsSkipped.length > 0) {
       console.log(chalk.dim(`Commands skipped for: ${results.commandsSkipped.join(', ')} (no adapter)`));
+    }
+    if (results.skillsAsCommandSurface.length > 0) {
+      console.log(chalk.dim(`Skills used as command surface for: ${results.skillsAsCommandSurface.join(', ')} (skills-invocable)`));
     }
     if (results.removedCommandCount > 0) {
       console.log(chalk.dim(`Removed: ${results.removedCommandCount} command files (delivery: skills)`));

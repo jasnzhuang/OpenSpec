@@ -741,6 +741,86 @@ describe('InitCommand - profile and detection features', () => {
     const skillFile = path.join(testDir, '.claude', 'skills', 'openspec-explore', 'SKILL.md');
     expect(await fileExists(skillFile)).toBe(true);
   });
+
+  describe('command-surface capability (Trae / skills-invocable)', () => {
+    it('should generate skills for Trae when delivery=commands (skills as command surface)', async () => {
+      saveGlobalConfig({
+        featureFlags: {},
+        profile: 'core',
+        delivery: 'commands',
+      });
+
+      const initCommand = new InitCommand({ tools: 'trae', force: true });
+      await initCommand.execute(testDir);
+
+      // Skills SHOULD exist for Trae (they are the command surface)
+      const skillFile = path.join(testDir, '.trae', 'skills', 'openspec-explore', 'SKILL.md');
+      expect(await fileExists(skillFile)).toBe(true);
+    });
+
+    it('should generate commands for adapter tools and skills for Trae when delivery=commands (mixed)', async () => {
+      saveGlobalConfig({
+        featureFlags: {},
+        profile: 'core',
+        delivery: 'commands',
+      });
+
+      const initCommand = new InitCommand({ tools: 'claude,trae', force: true });
+      await initCommand.execute(testDir);
+
+      // Claude: commands should exist, skills should NOT
+      const claudeCmd = path.join(testDir, '.claude', 'commands', 'opsx', 'explore.md');
+      const claudeSkill = path.join(testDir, '.claude', 'skills', 'openspec-explore', 'SKILL.md');
+      expect(await fileExists(claudeCmd)).toBe(true);
+      expect(await fileExists(claudeSkill)).toBe(false);
+
+      // Trae: skills SHOULD exist as command surface
+      const traeSkill = path.join(testDir, '.trae', 'skills', 'openspec-explore', 'SKILL.md');
+      expect(await fileExists(traeSkill)).toBe(true);
+    });
+
+    it('should generate skills for Trae when delivery=both', async () => {
+      saveGlobalConfig({
+        featureFlags: {},
+        profile: 'core',
+        delivery: 'both',
+      });
+
+      const initCommand = new InitCommand({ tools: 'trae', force: true });
+      await initCommand.execute(testDir);
+
+      const skillFile = path.join(testDir, '.trae', 'skills', 'openspec-explore', 'SKILL.md');
+      expect(await fileExists(skillFile)).toBe(true);
+    });
+
+    it('should fail with clear error when delivery=commands and selected tool has no command surface', async () => {
+      saveGlobalConfig({
+        featureFlags: {},
+        profile: 'core',
+        delivery: 'commands',
+      });
+
+      // ForgeCode has no command adapter and no skills-invocable annotation,
+      // so it resolves to command surface 'none'.
+      const initCommand = new InitCommand({ tools: 'forgecode', force: true });
+      await expect(initCommand.execute(testDir)).rejects.toThrow(
+        /have no command surface and cannot be used with delivery=commands/
+      );
+    });
+
+    it('should fail when delivery=commands and any selected tool in a mixed list has no command surface', async () => {
+      saveGlobalConfig({
+        featureFlags: {},
+        profile: 'core',
+        delivery: 'commands',
+      });
+
+      const initCommand = new InitCommand({ tools: 'claude,forgecode', force: true });
+      await expect(initCommand.execute(testDir)).rejects.toThrow(
+        /have no command surface and cannot be used with delivery=commands/
+      );
+    });
+  });
 });
 
 async function fileExists(filePath: string): Promise<boolean> {
