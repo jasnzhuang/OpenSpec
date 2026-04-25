@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {
   hasProjectConfigDrift,
+  hasToolProfileOrDeliveryDrift,
   WORKFLOW_TO_SKILL_DIR,
 } from '../../src/core/profile-sync-drift.js';
 import { CORE_WORKFLOWS } from '../../src/core/profiles.js';
@@ -12,6 +13,13 @@ import { CommandAdapterRegistry } from '../../src/core/command-generation/index.
 function writeSkill(projectDir: string, workflowId: string): void {
   const skillDirName = WORKFLOW_TO_SKILL_DIR[workflowId as keyof typeof WORKFLOW_TO_SKILL_DIR];
   const skillPath = path.join(projectDir, '.claude', 'skills', skillDirName, 'SKILL.md');
+  fs.mkdirSync(path.dirname(skillPath), { recursive: true });
+  fs.writeFileSync(skillPath, `name: ${skillDirName}\n`);
+}
+
+function writeTraeSkill(projectDir: string, workflowId: string): void {
+  const skillDirName = WORKFLOW_TO_SKILL_DIR[workflowId as keyof typeof WORKFLOW_TO_SKILL_DIR];
+  const skillPath = path.join(projectDir, '.trae', 'skills', skillDirName, 'SKILL.md');
   fs.mkdirSync(path.dirname(skillPath), { recursive: true });
   fs.writeFileSync(skillPath, `name: ${skillDirName}\n`);
 }
@@ -88,5 +96,54 @@ describe('profile sync drift detection', () => {
 
     const hasDrift = hasProjectConfigDrift(tempDir, CORE_WORKFLOWS, 'both');
     expect(hasDrift).toBe(true);
+  });
+
+  describe('skills-invocable tool (Trae) drift detection', () => {
+    it('does NOT report drift when Trae skills exist under delivery=commands (skills are command surface)', () => {
+      for (const workflow of CORE_WORKFLOWS) {
+        writeTraeSkill(tempDir, workflow);
+      }
+
+      const hasDrift = hasToolProfileOrDeliveryDrift(tempDir, 'trae', CORE_WORKFLOWS, 'commands');
+      expect(hasDrift).toBe(false);
+    });
+
+    it('reports drift when Trae core skills are MISSING under delivery=commands', () => {
+      // Only write a subset of core skills — missing ones should trigger drift
+      writeTraeSkill(tempDir, 'explore');
+
+      const hasDrift = hasToolProfileOrDeliveryDrift(tempDir, 'trae', CORE_WORKFLOWS, 'commands');
+      expect(hasDrift).toBe(true);
+    });
+
+    it('reports drift when Trae has extra (deselected) skills under delivery=commands', () => {
+      // Install core skills + an extra workflow not in core profile
+      for (const workflow of CORE_WORKFLOWS) {
+        writeTraeSkill(tempDir, workflow);
+      }
+      writeTraeSkill(tempDir, 'sync'); // 'sync' not in core profile
+
+      const hasDrift = hasToolProfileOrDeliveryDrift(tempDir, 'trae', CORE_WORKFLOWS, 'commands');
+      expect(hasDrift).toBe(true);
+    });
+
+    it('hasProjectConfigDrift returns false when Trae skills match profile under delivery=commands', () => {
+      for (const workflow of CORE_WORKFLOWS) {
+        writeTraeSkill(tempDir, workflow);
+      }
+
+      const hasDrift = hasProjectConfigDrift(tempDir, CORE_WORKFLOWS, 'commands');
+      expect(hasDrift).toBe(false);
+    });
+
+    it('hasProjectConfigDrift returns true when Trae has extra skills under delivery=commands', () => {
+      for (const workflow of CORE_WORKFLOWS) {
+        writeTraeSkill(tempDir, workflow);
+      }
+      writeTraeSkill(tempDir, 'sync'); // extra workflow
+
+      const hasDrift = hasProjectConfigDrift(tempDir, CORE_WORKFLOWS, 'commands');
+      expect(hasDrift).toBe(true);
+    });
   });
 });

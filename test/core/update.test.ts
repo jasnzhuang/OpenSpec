@@ -1476,7 +1476,7 @@ More user content after markers.
       )).toBe(false);
     });
 
-    it('should remove skills for configured tools without command adapters in commands-only delivery', async () => {
+    it('should fail with preflight error for configured tools without command surface in commands-only delivery', async () => {
       setMockConfig({
         featureFlags: {},
         profile: 'core',
@@ -1485,21 +1485,27 @@ More user content after markers.
 
       const { AI_TOOLS } = await import('../../src/core/config.js');
       const { CommandAdapterRegistry } = await import('../../src/core/command-generation/index.js');
-      const adapterlessTool = AI_TOOLS.find((tool) => tool.skillsDir && !CommandAdapterRegistry.get(tool.value));
-      expect(adapterlessTool).toBeDefined();
-      if (!adapterlessTool?.skillsDir) {
+      const noneSurfaceTool = AI_TOOLS.find(
+        (tool) => tool.skillsDir && CommandAdapterRegistry.getCommandSurface(tool.value, tool.commandSurface) === 'none'
+      );
+      expect(noneSurfaceTool).toBeDefined();
+      if (!noneSurfaceTool?.skillsDir) {
         return;
       }
 
-      const skillsDir = path.join(testDir, adapterlessTool.skillsDir, 'skills');
+      const skillsDir = path.join(testDir, noneSurfaceTool.skillsDir, 'skills');
       await fs.mkdir(path.join(skillsDir, 'openspec-explore'), { recursive: true });
       await fs.writeFile(path.join(skillsDir, 'openspec-explore', 'SKILL.md'), 'old');
 
-      await expect(updateCommand.execute(testDir)).resolves.toBeUndefined();
+      // update now fails fast before any removal when a none-surface tool is configured with delivery=commands
+      await expect(updateCommand.execute(testDir)).rejects.toThrow(
+        /have no command surface and cannot be used with delivery=commands/
+      );
 
+      // Skills should NOT have been removed (fail-fast before any writes)
       expect(await FileSystemUtils.fileExists(
         path.join(skillsDir, 'openspec-explore', 'SKILL.md')
-      )).toBe(false);
+      )).toBe(true);
     });
 
     it('should apply config sync when templates are up to date', async () => {

@@ -98,10 +98,17 @@ export function hasToolProfileOrDeliveryDrift(
   const desiredWorkflowSet = new Set<WorkflowId>(knownDesiredWorkflows);
   const skillsDir = path.join(projectPath, tool.skillsDir, 'skills');
   const adapter = CommandAdapterRegistry.get(toolId);
-  const shouldGenerateSkills = delivery !== 'commands';
-  const shouldGenerateCommands = delivery !== 'skills';
 
-  if (shouldGenerateSkills) {
+  // Compute per-tool effective delivery based on command-surface capability.
+  // - skills-invocable: skills are the command surface; always generate/keep them regardless of delivery
+  // - adapter: follows global delivery setting
+  // - none: no command surface; skip command drift checking entirely
+  const commandSurface = CommandAdapterRegistry.getCommandSurface(toolId, tool.commandSurface);
+  const effectiveGenerateSkills = delivery !== 'commands' || commandSurface === 'skills-invocable';
+  const effectiveGenerateCommands = delivery !== 'skills' && commandSurface === 'adapter';
+  const effectiveRemoveCommands = delivery === 'skills' && !!adapter;
+
+  if (effectiveGenerateSkills) {
     for (const workflow of knownDesiredWorkflows) {
       const dirName = WORKFLOW_TO_SKILL_DIR[workflow];
       const skillFile = path.join(skillsDir, dirName, 'SKILL.md');
@@ -120,6 +127,7 @@ export function hasToolProfileOrDeliveryDrift(
       }
     }
   } else {
+    // Skills should not exist — if any skill dirs are present, that's drift.
     for (const workflow of ALL_WORKFLOWS) {
       const dirName = WORKFLOW_TO_SKILL_DIR[workflow];
       const skillDir = path.join(skillsDir, dirName);
@@ -129,7 +137,7 @@ export function hasToolProfileOrDeliveryDrift(
     }
   }
 
-  if (shouldGenerateCommands && adapter) {
+  if (effectiveGenerateCommands && adapter) {
     for (const workflow of knownDesiredWorkflows) {
       const cmdPath = adapter.getFilePath(workflow);
       const fullPath = path.isAbsolute(cmdPath) ? cmdPath : path.join(projectPath, cmdPath);
@@ -147,9 +155,9 @@ export function hasToolProfileOrDeliveryDrift(
         return true;
       }
     }
-  } else if (!shouldGenerateCommands && adapter) {
+  } else if (effectiveRemoveCommands) {
     for (const workflow of ALL_WORKFLOWS) {
-      const cmdPath = adapter.getFilePath(workflow);
+      const cmdPath = adapter!.getFilePath(workflow);
       const fullPath = path.isAbsolute(cmdPath) ? cmdPath : path.join(projectPath, cmdPath);
       if (fs.existsSync(fullPath)) {
         return true;
@@ -226,10 +234,14 @@ export function hasProjectConfigDrift(
   }
 
   const desiredSet = new Set(toKnownWorkflows(desiredWorkflows));
-  const includeSkills = delivery !== 'commands';
-  const includeCommands = delivery !== 'skills';
 
   for (const toolId of configuredTools) {
+    const tool = AI_TOOLS.find((t) => t.value === toolId);
+    // Use per-tool capability to determine which artifact types should be checked
+    const commandSurface = CommandAdapterRegistry.getCommandSurface(toolId, tool?.commandSurface);
+    const includeSkills = delivery !== 'commands' || commandSurface === 'skills-invocable';
+    const includeCommands = delivery !== 'skills' && commandSurface === 'adapter';
+
     const installed = getInstalledWorkflowsForTool(projectPath, toolId, { includeSkills, includeCommands });
     if (installed.some((workflow) => !desiredSet.has(workflow))) {
       return true;

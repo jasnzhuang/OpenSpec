@@ -120,6 +120,21 @@ export class UpdateCommand {
       return;
     }
 
+    // 5a. Preflight: under delivery=commands, fail if any configured tool has no command surface
+    if (delivery === 'commands') {
+      const noneTools = configuredTools.filter((toolId) => {
+        const tool = AI_TOOLS.find((t) => t.value === toolId);
+        return CommandAdapterRegistry.getCommandSurface(toolId, tool?.commandSurface) === 'none';
+      });
+      if (noneTools.length > 0) {
+        const ids = noneTools.join(', ');
+        throw new Error(
+          `The following configured tool(s) have no command surface and cannot be used with delivery=commands: ${ids}.\n` +
+          `Use delivery=both or delivery=skills instead (run \`openspec config profile\` to change).`
+        );
+      }
+    }
+
     // 6. Check version status for all configured tools
     const commandConfiguredTools = getCommandConfiguredTools(resolvedProjectPath);
     const commandConfiguredSet = new Set(commandConfiguredTools);
